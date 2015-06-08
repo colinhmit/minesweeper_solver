@@ -17,13 +17,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import NoSuchElementException
  
-#felt: 'c-2D', 'c-3D', etc
- 
-#work piles: work1, work2... work8
-#free cell piles: temp1, ... temp4
-#completion piles: good1, ... good4
+#internal grid [16][30]
 grid =[[-1 for j in range(30)] for i in range(16)]
-cell_queue = []
+
 cell_bomb_probs = {}
 processed_cells = []
 
@@ -49,33 +45,24 @@ class TAS:
         f.close()
 
     def play_game(self, driver, f):
-        self.print_grid()
-        print "///////////////////////////////" 
-        self.print_grid()
+
         driver.find_element_by_id("2_15").click()
-        print "///////////////////////////////"
-        self.print_grid()
+
         cell_tuple_temp = self.string_to_tuple("2_15")
+        
         self.refresh_specific_cells(driver, cell_tuple_temp)
         
-        
         while True:
+            #find the lowest prob cell
             cell_tuple_temp = min(cell_bomb_probs, key = cell_bomb_probs.get)
             cell_string_temp = self.tuple_to_string(cell_tuple_temp)
             driver.find_element_by_id(cell_string_temp).click()
             self.refresh_specific_cells(driver, cell_tuple_temp)
             del cell_bomb_probs[cell_tuple_temp]
         
-        print "///////////////////////////////"
-        self.print_grid()
-
-    #add any >0 val cell to the queue
-    # for each cell in the queue
-    ## update the prob to max
-    ## if prob == 1:
-    ### deiterate all cells around
 
 
+    #given a specific cell, refresh it and all changed neighbors, with propagation
     def refresh_specific_cells(self, driver, cell_tuple):
         html = driver.page_source
         soup = BeautifulSoup(html, "html5lib")
@@ -90,13 +77,17 @@ class TAS:
             cell_soup = soup.find("div", {"id":cell_string})
             cell_value = cell_soup['class'][-1]
             new_val = self.process_cell(cell_value)
+            
+            #if the cells value has changed (blank -> value)
             if grid[x][y] != new_val:
                 grid[x][y] = new_val
+                #if the cell is an "edge"
                 if (grid[x][y]>0):
                     processed_cells.append(((x,y),grid[x][y]))
 
                 queue = queue + self.get_valid_neighbors(x,y)
-   
+                
+        #for each "edge" update the internal probs
         for cell in processed_cells:
             self.update_probs(cell[0][0], cell[0][1], cell[1])
 #        print "probs"
@@ -124,6 +115,7 @@ class TAS:
         x, y = cell_tuple
         return str(x+1) +"_"+ str(y+1)
 
+    #turn the raw cell value string into an integer
     def process_cell(self, string_value):
         if string_value == "blank":
             return -1
@@ -131,6 +123,7 @@ class TAS:
             string_value_list = list(string_value)
             return int(string_value_list[-1])
     
+    #given a cell, update its blank neighbors probability of being a bomb
     def update_probs(self, x, y, val):
         neighbor_cells = []
         for i in range(-1,2):
